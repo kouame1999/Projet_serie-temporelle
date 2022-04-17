@@ -3,14 +3,14 @@ setwd(path)
 list.files()
 datafile <- "Base.csv"
 data <- read.csv(datafile, sep = ";",dec = ",")
-
+data
 require(zoo)
 require(tseries)
 library(plyr)
 data<-rename(data, c("ï..dates"="dates"))
 dates_char<-data$dates
 dates_char[1];tail(dates_char,1)
-dates<-as.yearmon(seq(1995+0/12,2015+11/12,1/12))
+dates<-as.yearmon(seq(1990+0/12,2018+11/12,1/12))
 food<-zoo(data$IPI_ALIMENTAIRE,order.by = dates)
 
 # representation de la serie
@@ -18,7 +18,7 @@ plot(food, main= "Evolution de l'indice de la production industrielle alimentair
 #L'observation nous montre que notre n'est pas stationnaire et possède une tendance à la hausse. 
 #Nous ferons un test de stationnarité pour confirmer cette intuition.
 # Analyse de la tendance.
-df.ts = ts(food, frequency = 12, start=c(1995, 01), end = c(2014, 12))
+df.ts = ts(food, frequency = 12, start=c(1990, 01), end = c(2017, 12))
 dec <- decompose(df.ts)
 plot(dec)
 # la serie presente une tendance et donc 
