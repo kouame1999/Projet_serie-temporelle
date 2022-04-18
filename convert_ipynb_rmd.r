@@ -1,0 +1,1 @@
+rmarkdown:::convert_ipynb("code.ipynb", output = xfun::with_ext("code.ipynb", "Rmd"))

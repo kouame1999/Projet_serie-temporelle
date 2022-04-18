@@ -1,0 +1,198 @@
+---
+title: An R Markdown document converted from "code.ipynb"
+output: html_document
+---
+
+```{r}
+options(warn = -1)
+
+figsize <- function(width, heigth) {
+     options(repr.plot.width = width, repr.plot.height = heigth)
+}
+```
+
+```{r}
+data <- read.csv("data.csv")
+serie <- ts(
+    data$Valeur,
+    start = c(1990, 1),
+    frequency = 12
+    )
+serie
+```
+
+# Question 1
+
+La série représente l'indice de la production industrielle des vêtements de dessus en France, entre 1990 et 2022.
+
+```{r}
+figsize(10, 7)
+plot(serie)
+```
+
+On entrainera le modèle sur les données jusqu'en 2018, puis on cherchera à prédire les données de 2019. Cela nous permet d'éviter la période de la crise du Covid-19.
+
+```{r}
+serie <- window(
+    serie,
+    end = c(2018, 12)
+)
+plot(serie, ylab = "IPI Alimentaire")
+```
+
+# Question 2 - Stationnarisation
+
+La série comporte une tendance croissante.
+
+```{r}
+plot(decompose(serie))
+```
+
+```{r}
+diff1 <- diff(serie, 1)
+plot(diff1, ylab = "Série différenciée", title = "Série différenciée")
+```
+
+```{r}
+diff1
+```
+
+La série différenciée semble stationnaire. Nous allons le vérifier avec plusieurs tests.
+
+### Test de Dickey-Fuller
+
+```{r}
+dickey_fuller <- function(x, ks = 0:24, type = "ct") {
+    adf_p_values <- c()
+    lb_p_values <- c()
+    for (k in ks) {
+        adf <- fUnitRoots::adfTest(x, lags = k, type = type)
+        adf_p_val <- adf@test$p.value
+        lb_p_val <- Box.test(adf@test$lm$residuals, 24)$p.value
+        adf_p_values <- c(adf_p_values, adf_p_val)
+        lb_p_values <- c(lb_p_values, lb_p_val)
+    }
+
+    df <- data.frame(
+        Lag = ks,
+        ADF_Test = adf_p_values,
+        Ljung_Box_Residuals = lb_p_values
+    )
+
+    return(df)
+}
+
+dickey_fuller(diff1, type = "nc", ks = 0:5)
+```
+
+Le test de Dickey-Fuller augmenté rejette donc l'hypothèse de racine unité.
+
+### Test de Phillips-Perron
+
+```{r}
+tseries::pp.test(diff1)
+```
+
+Idem pour le test de Phillips-Perron
+
+### Test KPSS
+
+```{r}
+tseries::kpss.test(diff1)
+```
+
+Le test KPSS ne rejette pas l'hypothèse de stationnarité.
+
+# Question 4 - Modélisation ARMA
+
+```{r}
+library(ggplot2)
+library(patchwork)
+library(forecast)
+
+figsize(20, 5)
+(ggAcf(diff1, lag.max = 12) + labs(title = "ACF - Série différenciée")
+     + ggPacf(diff1, lag.max = 12) + labs(title = "PACF - Série différenciée"));
+```
+
+Ordres maximaux: $p_{max}=7$, $q_{max}=1$
+
+### Choix du modèle :
+
+```{r}
+evaluate_models_ic <- function(pmax, d, qmax, x = serie) {
+  ps <- c()
+  ds <- c()
+  qs <- c()
+  aics <- c()
+  bics <- c()
+  for (q in 0:qmax) {
+    for (p in 0:pmax) {
+      ps <- c(ps, p)
+      ds <- c(ds, d)
+      qs <- c(qs, q)
+      model <- forecast::Arima(x, order = c(p, d, q))
+      aics <- c(aics, AIC(model))
+      bics <- c(bics, BIC(model))
+    }
+  }
+
+  df <- data.frame(
+        p = ps,
+        d = ds,
+        q = qs,
+        AIC = aics,
+        BIC = bics
+    )
+
+    return(df)
+}
+
+tab <- evaluate_models_ic(pmax = 7, d = 1, qmax = 1)
+tab
+```
+
+L'AIC est minimisé en par l'ARIMA(1,1,1) et le BIC par l'ARIMA(0,1,1)
+
+```{r}
+knitr::kable(t(sapply(tab, as.integer)), "latex")
+```
+
+```{r}
+figsize(10, 7)
+res01 <- astsa::sarima(serie, 0, 1, 1)
+res11 <- astsa::sarima(serie, 1, 1, 1)
+```
+
+Pour les modèles ARIMA(0,1,1) et ARIMA(1,1,1), les tests de Ljung-Box et les auto-corrélogrammes semblent indiquer que les résidus sont des bruits blancs. <br>Pour trancher entre ces deux modèles, regardons si l'ARIMA(1,1,1) peut être simplifié :
+
+```{r}
+res01$ttable
+```
+
+```{r}
+knitr::kable(res01$ttable, "latex")
+```
+
+```{r}
+res11$ttable
+```
+
+```{r}
+knitr::kable(res11$ttable, "latex")
+```
+
+Au seuil de 10%, on l'ARIMA(1,1,1) ne peut pas être simplifié. On conserve donc ce modèle. On a alors :
+
+$$
+    X_t - 0,16X_{t-1} = 0,03 + \epsilon_t - 0,72\epsilon_{t-1}
+$$
+
+Ainsi, pour la série d'origine (notée $Y_t$), comme $X_t = Y_t - Y_{t-1}$, on a $Y_t = Y_{t-1}+X_t$ et donc
+
+\begin{align}
+    Y_t & = Y_{t-1} + 0,16X_{t-1} + 0,03 + \epsilon_t - 0,72\epsilon_{t-1}  \\
+    Y_t & = Y_{t-1} + 0,16(Y_{t-1}-Y_{t-2}) + 0,03 + \epsilon_t - 0,72\epsilon_{t-1}  \\
+    Y_t & = 1,16Y_{t-1} - 0,16Y_{t-2} + 0,03 + \epsilon_t - 0,72\epsilon_{t-1}
+\end{align}
+
