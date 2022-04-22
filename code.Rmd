@@ -40,26 +40,15 @@ serie <- window(
 plot(serie, ylab = "IPI Alimentaire")
 ```
 
-# Question 2 - Stationnarisation
-
 La série comporte une tendance croissante.
 
 ```{r}
 plot(decompose(serie))
 ```
 
-```{r}
-diff1 <- diff(serie, 1)
-plot(diff1, ylab = "Série différenciée", title = "Série différenciée")
-```
+On vérifie que la série n'est pas stationnaire avec les tests usuels (ADF, PP, KPSS).
 
-```{r}
-diff1
-```
-
-La série différenciée semble stationnaire. Nous allons le vérifier avec plusieurs tests.
-
-### Test de Dickey-Fuller
+### Dickey-Fuller augmenté
 
 ```{r}
 dickey_fuller <- function(x, ks = 0:24, type = "ct") {
@@ -82,6 +71,43 @@ dickey_fuller <- function(x, ks = 0:24, type = "ct") {
     return(df)
 }
 
+dickey_fuller(serie, type = "nc", ks = 0:5)
+```
+
+ADF ne rejette pas l'hypothèse de racine unité (le test est valable à partir de $k=3$).
+
+### Philipps-Perron
+
+```{r}
+tseries::pp.test(serie)
+```
+
+Phillips-Perron rejette l'hypothèse de racine unité.
+
+### KPSS
+
+```{r}
+tseries::kpss.test(serie)
+```
+
+KPSS rejette la stationnarité.
+
+# Question 2 - Stationnarisation
+
+```{r}
+diff1 <- diff(serie, 1)
+plot(diff1, ylab = "Série différenciée", title = "Série différenciée")
+```
+
+```{r}
+diff1
+```
+
+La série différenciée semble stationnaire. Nous allons le vérifier avec plusieurs tests.
+
+### Test de Dickey-Fuller
+
+```{r}
 dickey_fuller(diff1, type = "nc", ks = 0:5)
 ```
 
