@@ -222,3 +222,127 @@ Ainsi, pour la série d'origine (notée $Y_t$), comme $X_t = Y_t - Y_{t-1}$, on 
     Y_t & = 1,16Y_{t-1} - 0,16Y_{t-2} + 0,03 + \epsilon_t - 0,72\epsilon_{t-1}
 \end{align}
 
+# Partie 3 - Prévisions
+
+Sous l'hypothèse que les résidus forment un bruit blanc gaussien, les erreurs de prévision suivent une loi normale :
+
+$$
+
+    \hat\varepsilon := \begin{pmatrix}
+        \hat\varepsilon_{T+1|T} \\
+        \hat\varepsilon_{T+2|T} \\
+    \end{pmatrix}
+
+    \sim \mathcal{N}(0,\Omega)
+
+    \quad \text{où} \quad
+
+    \Omega = \sigma^2\begin{pmatrix}
+        1 & 1 + \phi - \psi \\
+        1 + \phi - \psi & 1 + (1+\phi-\psi)^2 \\
+    \end{pmatrix}
+
+$$
+
+Ainsi
+
+$$
+
+    \hat\varepsilon'\Omega^{-1}\hat\varepsilon \sim \chi^2(2)
+
+$$
+
+et donc une région de confiance pour $\hat\varepsilon$ est
+
+$$
+
+    \left\{ e \in \mathbb{R}^2 : e'\Omega^{-1}e \leq q_{1-\alpha} \right\}
+
+$$
+
+où $ q_{1-\alpha} $ est le quantile d'ordre $ 1 - \alpha $ d'une loi $ \chi^2(2) $.
+
+Une région de confiance pour $ \begin{pmatrix} Y_{T+1} \\ Y_{T+2} \end{pmatrix} $ est donc
+
+$$
+
+    \begin{pmatrix}
+        \hat Y_{T+1|T} \\
+        \hat Y_{T+2|T}
+    \end{pmatrix}
+    
+    +
+    
+    \left\{ e \in \mathbb{R}^2 : |e'\Omega^{-1}e| \leq q_{1-\alpha} \right\}
+
+$$
+
+Pour estimer cette région de confiance, il faut estimer $\Omega$. Comme $\phi$ et $\psi$ sont déjà estimés, il ne reste qu'à estimer $\sigma$, à partir des résidus observés. La région obtenue ne sera alors valable qu'asymptotiquement. Pour obtenir une région de confiance exacte, on peut aussi utiliser le fait que 
+
+$$
+
+    \frac{T-2}{2}\hat\varepsilon'\hat\Omega^{-1}\hat\varepsilon \sim F(2, T-2)
+
+$$
+
+### Estimation de $\Omega$
+
+```{r}
+sigma2 <- var(res11$fit$residuals)
+sigma2
+```
+
+```{r}
+phi <- res11$fit$coef["ar1"]
+psi <- - res11$fit$coef["ma1"]
+# La convention utilisée par R est différente de celle utilisée dans nos calculs
+
+omega <- sigma2 * matrix(
+    c(
+        1, 1 + phi - psi,
+        1 + phi - psi, 1 + (1 + phi - psi)**2
+    ),
+    nrow = 2,
+    ncol = 2
+)
+omega
+```
+
+```{r}
+omega_inv <- matlib::inv(omega)
+omega_inv
+```
+
+```{r}
+q95 <- qchisq(.95, df = 2)
+q95
+```
+
+### Prédiction des valeurs futures
+
+```{r}
+predictions <- astsa::sarima.for(
+    serie, n.ahead = 2,
+    p = 1, d = 1, q = 1,
+    plot = FALSE
+    )$pred
+predictions
+```
+
+### Région de confiance
+
+```{r}
+region <- ellipse::ellipse(omega, centre = predictions, level = .95)
+
+par(mar = c(4, 4, 3, 5))
+
+plot(region, type = "l", axes = F, xlab = "", ylab = "")
+par(new = T)
+plot(predictions[1], predictions[2], axes = F, xlab = "", ylab = "")
+
+axis(1, ylim = c(60, 140), at = seq(60, 140, by = 10))
+mtext("Prévision pour janvier 2019", side = 1, line = 2.5)
+axis(2, ylim = c(60, 140), at = seq(60, 140, by = 10))
+mtext("Prévision pour février 2019", side = 2, line = 2.5)
+```
+
