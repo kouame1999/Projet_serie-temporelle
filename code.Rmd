@@ -13,12 +13,16 @@ figsize <- function(width, heigth) {
 
 ```{r}
 data <- read.csv("data.csv")
-serie <- ts(
+serie_complete <- ts(
     data$Valeur,
     start = c(1990, 1),
     frequency = 12
     )
-serie
+serie_complete
+```
+
+```{r}
+diff(serie_complete, 1)
 ```
 
 # Question 1
@@ -294,13 +298,12 @@ sigma2
 
 ```{r}
 phi <- res11$fit$coef["ar1"]
-psi <- - res11$fit$coef["ma1"]
-# La convention utilisée par R est différente de celle utilisée dans nos calculs
+psi <- res11$fit$coef["ma1"]
 
 omega <- sigma2 * matrix(
     c(
-        1, 1 + phi - psi,
-        1 + phi - psi, 1 + (1 + phi - psi)**2
+        1, phi + psi,
+        phi + psi, 1 + (phi + psi)**2
     ),
     nrow = 2,
     ncol = 2
@@ -322,9 +325,9 @@ q95
 
 ```{r}
 predictions <- astsa::sarima.for(
-    serie, n.ahead = 2,
-    p = 1, d = 1, q = 1,
-    plot = FALSE
+    diff1, n.ahead = 2,
+    p = 1, d = 0, q = 1,
+    plot = TRUE
     )$pred
 predictions
 ```
@@ -339,10 +342,12 @@ par(mar = c(4, 4, 3, 5))
 plot(region, type = "l", axes = F, xlab = "", ylab = "")
 par(new = T)
 plot(predictions[1], predictions[2], axes = F, xlab = "", ylab = "")
+par(new = T)
+plot(0.25, -0.49, axes = F, xlab = "", ylab = "", col = "blue", pch = 3)
 
-axis(1, ylim = c(60, 140), at = seq(60, 140, by = 10))
+axis(1, ylim = c(-1, 1), at = seq(-1, 1, by = .1))
 mtext("Prévision pour janvier 2019", side = 1, line = 2.5)
-axis(2, ylim = c(60, 140), at = seq(60, 140, by = 10))
+axis(2, ylim = c(-1, 1), at = seq(-1, 1, by = .1))
 mtext("Prévision pour février 2019", side = 2, line = 2.5)
 ```
 
