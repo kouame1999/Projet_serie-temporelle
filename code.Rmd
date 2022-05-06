@@ -3,58 +3,81 @@ title: An R Markdown document converted from "code.ipynb"
 output: html_document
 ---
 
+Le code est fourni en format notebook R (code.rmd) et Jupyter (code.ipynb). Le contenu des deux fichiers est identique.
+
 ```{r}
+# Pour ne pas afficher les warnings
 options(warn = -1)
 
+# Pour contrôler les dimensions des graphes
 figsize <- function(width, heigth) {
      options(repr.plot.width = width, repr.plot.height = heigth)
 }
 ```
 
 ```{r}
+# Ce code permet de charger les données à analyser, le données sont disponible via le lien:
+# https://www.insee.fr/fr/statistiques/serie/010537233
+# La librairie ts permet de declarer la base de données comme une serie temporelle
+
 data <- read.csv("data.csv")
-serie_complete <- ts(
+serie <- ts(
     data$Valeur,
     start = c(1990, 1),
     frequency = 12
     )
-serie_complete
-```
 
-```{r}
-diff(serie_complete, 1)
+# Visualisation de la série
+serie
 ```
 
 # Question 1
 
-La série représente l'indice de la production industrielle des vêtements de dessus en France, entre 1990 et 2022.
-
 ```{r}
+# Représentation de graphique de la serie: Evolution de l'indice de production alimentaire
 figsize(10, 7)
-plot(serie)
+plot(serie, col = 4, lwd = 3)
 ```
 
 On entrainera le modèle sur les données jusqu'en 2018, puis on cherchera à prédire les données de 2019. Cela nous permet d'éviter la période de la crise du Covid-19.
 
 ```{r}
+# Sélection et représentation des données sur la période d'analyse #
+
 serie <- window(
     serie,
     end = c(2018, 12)
 )
-plot(serie, ylab = "IPI Alimentaire")
+plot(
+    serie,
+    ylab = "IPI Alimentaire",
+    main = "Evolution de l'indice de la production alimentaire",
+    col = 4, lwd = 3
+)
 ```
 
-La série comporte une tendance croissante.
+Comme dans toute analyse de serie temporelle il est important de voir la decomposition de notre serie, notamment
+  - la composante saisonnière;
+  - la composante tendancielle.
+  
+Ici nous n'avons pas de problème de saisonnalité car série est corrigée des variations saisonnières.
 
 ```{r}
-plot(decompose(serie))
+# Ce code permet de visualiser la composition de notre série.
+plot(decompose(serie), col = 1, lwd = 3)
 ```
 
-On vérifie que la série n'est pas stationnaire avec les tests usuels (ADF, PP, KPSS).
+Graphiquement notre serie semble non stationnaire et possède une tendance à la hausse.
+
+On vérifie que la série n'est pas stationnaire avec les tests usuels:
+- ADF;
+- PP;
+- KPSS
 
 ### Dickey-Fuller augmenté
 
 ```{r}
+# Le test de Dickey-Fuller augmenté joint avec le test de Ljung Box (pour l'autocorrelation des résidus)
 dickey_fuller <- function(x, ks = 0:24, type = "ct") {
     adf_p_values <- c()
     lb_p_values <- c()
@@ -75,10 +98,13 @@ dickey_fuller <- function(x, ks = 0:24, type = "ct") {
     return(df)
 }
 
-dickey_fuller(serie, type = "nc", ks = 0:5)
+dickey_fuller(serie, type = "ct", ks = 0:5)
 ```
 
-ADF ne rejette pas l'hypothèse de racine unité (le test est valable à partir de $k=3$).
+Le test ADF rejette la racine unitaire pour les lags<5, mais il n'est pas forcément vrai
+car on n'a pas vérifier la validité des résidus qui vérifié par le test de Ljung Box.
+Finalement à partir des lags 5 ADF ne rejette pas l'hypothèse de racine unité  et cela est valide avec le test de Ljung Box
+(On a du ajouter $5$ retards pour obtenir des résidus non autocorrélés.)
 
 ### Philipps-Perron
 
@@ -96,18 +122,38 @@ tseries::kpss.test(serie)
 
 KPSS rejette la stationnarité.
 
+### Conclusion sur la stationnarité de la série brute.
+Deux de nos test conclurent sur la non stationnarité de la serie étudié. et donc nous considérons que notre serie
+est non statitionaire par la suite, ce qui confirme l'observation visuelle.
+
 # Question 2 - Stationnarisation
 
 ```{r}
-diff1 <- diff(serie, 1)
-plot(diff1, ylab = "Série différenciée", title = "Série différenciée")
-```
-
-```{r}
+#Code pour différencier la série en vue de la rendre stationnaire.
+diff1 <- diff(serie, 1) # différence première de la série
+# Visualisation des données différenciées
 diff1
 ```
 
-La série différenciée semble stationnaire. Nous allons le vérifier avec plusieurs tests.
+```{r}
+# Représentation jointe de la serie différenciée et la serie brute
+par(mfrow = c(1, 2))
+figsize(20, 7)
+plot(
+    serie,
+    ylab = "Série ",
+    main = "Evolution de l'indice de la production alimentaire",
+    col = 4, lwd = 3
+    )
+plot(
+    diff1,
+    ylab = "Série différenciée",
+    main = "Evolution de l'indice de la production alimentaire différenciée",
+    col = 1, lwd = 3
+    )
+```
+
+Visuellement, la série différenciée semble stationnaire et de tendance nulle. Nous allons le vérifier avec les tests de stationnarité utlisés précédemment
 
 ### Test de Dickey-Fuller
 
@@ -133,23 +179,31 @@ tseries::kpss.test(diff1)
 
 Le test KPSS ne rejette pas l'hypothèse de stationnarité.
 
-# Question 4 - Modélisation ARMA
+### Conclusion sur la stationnarité de la série différenciée.
+Les trois tests sont unanimes et indiquent que la série différenciée est stationnaire.
+
+# Questions 4 & 5 - Modélisation ARMA
 
 ```{r}
+# Ces librairies sont nécessaires pour les graphiques suivants
 library(ggplot2)
 library(patchwork)
+# Et pour la modélisation ARMA
 library(forecast)
 
+# Code pour visualiser l'ACF et le PACF
 figsize(20, 5)
-(ggAcf(diff1, lag.max = 12) + labs(title = "ACF - Série différenciée")
-     + ggPacf(diff1, lag.max = 12) + labs(title = "PACF - Série différenciée"));
+(ggAcf(diff1, lag.max = 12,lwd=2, col=1) + labs(title = "ACF - Série différenciée")
+     + ggPacf(diff1, lag.max = 12,lwd=2, col=4) + labs(title = "PACF - Série différenciée"));
 ```
 
-Ordres maximaux: $p_{max}=7$, $q_{max}=1$
+Les autocorrélations sont significatives jusqu'à l'ordre 1, donc $q_{max}=1$.
+Les autocorrélations partielles sont significatives jusqu'à l'ordre 7, donc $p_{max}=7$
 
 ### Choix du modèle :
 
 ```{r}
+# Ce code permet de créer un fonction pour calculer les valeurs de l'AIC et du BIC selon les ordres p, q et d du modèle ARIMA
 evaluate_models_ic <- function(pmax, d, qmax, x = serie) {
   ps <- c()
   ds <- c()
@@ -178,6 +232,7 @@ evaluate_models_ic <- function(pmax, d, qmax, x = serie) {
     return(df)
 }
 
+# On visualise les resultats en fonction de p, q et d
 tab <- evaluate_models_ic(pmax = 7, d = 1, qmax = 1)
 tab
 ```
@@ -185,10 +240,7 @@ tab
 L'AIC est minimisé en par l'ARIMA(1,1,1) et le BIC par l'ARIMA(0,1,1)
 
 ```{r}
-knitr::kable(t(sapply(tab, as.integer)), "latex")
-```
-
-```{r}
+# Test de validation des résidus
 figsize(10, 7)
 res01 <- astsa::sarima(serie, 0, 1, 1)
 res11 <- astsa::sarima(serie, 1, 1, 1)
@@ -197,19 +249,13 @@ res11 <- astsa::sarima(serie, 1, 1, 1)
 Pour les modèles ARIMA(0,1,1) et ARIMA(1,1,1), les tests de Ljung-Box et les auto-corrélogrammes semblent indiquer que les résidus sont des bruits blancs. <br>Pour trancher entre ces deux modèles, regardons si l'ARIMA(1,1,1) peut être simplifié :
 
 ```{r}
+# Estimation du modèle (MA(1))
 res01$ttable
 ```
 
 ```{r}
-knitr::kable(res01$ttable, "latex")
-```
-
-```{r}
+# Estimation du modèle (ARMA(1,1))
 res11$ttable
-```
-
-```{r}
-knitr::kable(res11$ttable, "latex")
 ```
 
 Au seuil de 10%, on l'ARIMA(1,1,1) ne peut pas être simplifié. On conserve donc ce modèle. On a alors :
@@ -228,78 +274,40 @@ Ainsi, pour la série d'origine (notée $Y_t$), comme $X_t = Y_t - Y_{t-1}$, on 
 
 # Partie 3 - Prévisions
 
-Sous l'hypothèse que les résidus forment un bruit blanc gaussien, les erreurs de prévision suivent une loi normale :
+La region de confiance de la prévision de 
 
-$$
 
-    \hat\varepsilon := \begin{pmatrix}
-        \hat\varepsilon_{T+1|T} \\
-        \hat\varepsilon_{T+2|T} \\
-    \end{pmatrix}
+$ \begin{pmatrix} X_{T+1} \\ X_{T+2} \end{pmatrix} $ est donnée par:
 
-    \sim \mathcal{N}(0,\Omega)
-
-    \quad \text{où} \quad
-
-    \Omega = \sigma^2\begin{pmatrix}
-        1 & 1 + \phi - \psi \\
-        1 + \phi - \psi & 1 + (1+\phi-\psi)^2 \\
-    \end{pmatrix}
-
-$$
-
-Ainsi
-
-$$
-
-    \hat\varepsilon'\Omega^{-1}\hat\varepsilon \sim \chi^2(2)
-
-$$
-
-et donc une région de confiance pour $\hat\varepsilon$ est
-
-$$
-
-    \left\{ e \in \mathbb{R}^2 : e'\Omega^{-1}e \leq q_{1-\alpha} \right\}
-
-$$
-
-où $ q_{1-\alpha} $ est le quantile d'ordre $ 1 - \alpha $ d'une loi $ \chi^2(2) $.
-
-Une région de confiance pour $ \begin{pmatrix} Y_{T+1} \\ Y_{T+2} \end{pmatrix} $ est donc
-
-$$
-
+\begin{equation}
+\boxed{
     \begin{pmatrix}
-        \hat Y_{T+1|T} \\
-        \hat Y_{T+2|T}
+        \hat X_{T+1|T} \\
+        \hat X_{T+2|T}
     \end{pmatrix}
-    
     +
-    
-    \left\{ e \in \mathbb{R}^2 : |e'\Omega^{-1}e| \leq q_{1-\alpha} \right\}
+    \left\{ e \in \mathbb{R}^2\ |\ e'\Omega^{-1}e \leq q_{1-\alpha} \right\}
+}
+\end{equation}
 
-$$
+(Les détails du calcul figurent dans le rapport)
 
-Pour estimer cette région de confiance, il faut estimer $\Omega$. Comme $\phi$ et $\psi$ sont déjà estimés, il ne reste qu'à estimer $\sigma$, à partir des résidus observés. La région obtenue ne sera alors valable qu'asymptotiquement. Pour obtenir une région de confiance exacte, on peut aussi utiliser le fait que 
-
-$$
-
-    \frac{T-2}{2}\hat\varepsilon'\hat\Omega^{-1}\hat\varepsilon \sim F(2, T-2)
-
-$$
+Pour estimer cette région de confiance, il faut estimer $\Omega$. Comme $\phi$ et $\psi$ sont déjà estimés, il ne reste qu'à estimer $\sigma$, à partir des résidus observés. La région obtenue ne sera alors valable qu'asymptotiquement.
 
 ### Estimation de $\Omega$
 
 ```{r}
+# Récupération de la variance des résidus
 sigma2 <- var(res11$fit$residuals)
 sigma2
 ```
 
 ```{r}
+# Récupération des coefficients
 phi <- res11$fit$coef["ar1"]
 psi <- res11$fit$coef["ma1"]
 
+# Calcul de la matrice de variance-covariance.
 omega <- sigma2 * matrix(
     c(
         1, phi + psi,
@@ -312,6 +320,7 @@ omega
 ```
 
 ```{r}
+# Inverse de la matrice de variance-covariance
 omega_inv <- matlib::inv(omega)
 omega_inv
 ```
@@ -324,6 +333,7 @@ q95
 ### Prédiction des valeurs futures
 
 ```{r}
+# Récupération des valeurs prédites
 predictions <- astsa::sarima.for(
     diff1, n.ahead = 2,
     p = 1, d = 0, q = 1,
@@ -337,17 +347,18 @@ predictions
 ```{r}
 region <- ellipse::ellipse(omega, centre = predictions, level = .95)
 
+figsize(7, 5)
 par(mar = c(4, 4, 3, 5))
 
 plot(region, type = "l", axes = F, xlab = "", ylab = "")
 par(new = T)
-plot(predictions[1], predictions[2], axes = F, xlab = "", ylab = "")
+plot(predictions[1], predictions[2], axes = F, xlab = "", ylab = "", col = "blue", pch = 16)
 par(new = T)
-plot(0.25, -0.49, axes = F, xlab = "", ylab = "", col = "blue", pch = 3)
+plot(0.25, -0.49, axes = F, xlab = "", ylab = "", col = "black", pch = 3)
 
-axis(1, ylim = c(-1, 1), at = seq(-1, 1, by = .1))
+axis(1, ylim = c(.15, .35), at = seq(.15, .35, by = .05))
 mtext("Prévision pour janvier 2019", side = 1, line = 2.5)
-axis(2, ylim = c(-1, 1), at = seq(-1, 1, by = .1))
+axis(2, ylim = c(-.7, -.3), at = seq(-.7, -.3, by = .1))
 mtext("Prévision pour février 2019", side = 2, line = 2.5)
 ```
 
