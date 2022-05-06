@@ -143,12 +143,12 @@ plot(
     serie,
     ylab = "Série ",
     main = "Evolution de l'indice de la production alimentaire",
-    col = 4, lwd = 3
+    col = 1, lwd = 3
     )
 plot(
     diff1,
     ylab = "Série différenciée",
-    main = "Evolution de l'indice de la production alimentaire différenciée",
+    main = "Evolution de l'indice de la production alimentaire différencié",
     col = 1, lwd = 3
     )
 ```
