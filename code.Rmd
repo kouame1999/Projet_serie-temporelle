@@ -35,7 +35,7 @@ serie
 
 ```{r}
 # Représentation de graphique de la serie: Evolution de l'indice de production alimentaire
-figsize(10, 7)
+figsize(15, 7)
 plot(serie, col = 4, lwd = 3)
 ```
 
@@ -48,6 +48,8 @@ serie <- window(
     serie,
     end = c(2018, 12)
 )
+
+figsize(15, 7)
 plot(
     serie,
     ylab = "IPI Alimentaire",
@@ -64,6 +66,7 @@ Ici nous n'avons pas de problème de saisonnalité car série est corrigée des 
 
 ```{r}
 # Ce code permet de visualiser la composition de notre série.
+figsize(15, 8)
 plot(decompose(serie), col = 1, lwd = 3)
 ```
 
@@ -193,8 +196,8 @@ library(forecast)
 
 # Code pour visualiser l'ACF et le PACF
 figsize(20, 5)
-(ggAcf(diff1, lag.max = 12,lwd=2, col=1) + labs(title = "ACF - Série différenciée")
-     + ggPacf(diff1, lag.max = 12,lwd=2, col=4) + labs(title = "PACF - Série différenciée"));
+(ggAcf(diff1, lag.max = 12,lwd=0, col=1) + labs(title = "ACF - Série différenciée")
+     + ggPacf(diff1, lag.max = 12,lwd=0, col=4) + labs(title = "PACF - Série différenciée"));
 ```
 
 Les autocorrélations sont significatives jusqu'à l'ordre 1, donc $q_{max}=1$.
@@ -249,6 +252,29 @@ res11 <- astsa::sarima(serie, 1, 1, 1)
 Pour les modèles ARIMA(0,1,1) et ARIMA(1,1,1), les tests de Ljung-Box et les auto-corrélogrammes semblent indiquer que les résidus sont des bruits blancs. <br>Pour trancher entre ces deux modèles, regardons si l'ARIMA(1,1,1) peut être simplifié :
 
 ```{r}
+# Pour le test de Ljung Box sur l'autocorrélation des résidus
+Qtests <- function(series, k, fitdf=0) {
+  pvals <- apply(matrix(1:k), 1, FUN = function(l) {
+    pval <- if (l < = fitdf) NA else {
+      Box.test(series, lag = l, type = "Ljung-Box", fitdf = fitdf)$p.value
+    }
+    return(c("lag" = l, "pval" = pval))
+  })
+  return(t(pvals))
+}
+```
+
+```{r}
+# Affiche les résultats pour le modèle MA(1)
+Qtests(res01$fit$residuals, 24, 1)
+```
+
+```{r}
+# Affiche les résultats pour le modèle ARMA(1,1)
+Qtests(res11$fit$residuals, 24, 2)
+```
+
+```{r}
 # Estimation du modèle (MA(1))
 res01$ttable
 ```
@@ -258,19 +284,7 @@ res01$ttable
 res11$ttable
 ```
 
-Au seuil de 10%, on l'ARIMA(1,1,1) ne peut pas être simplifié. On conserve donc ce modèle. On a alors :
-
-$$
-    X_t - 0,16X_{t-1} = 0,03 + \epsilon_t - 0,72\epsilon_{t-1}
-$$
-
-Ainsi, pour la série d'origine (notée $Y_t$), comme $X_t = Y_t - Y_{t-1}$, on a $Y_t = Y_{t-1}+X_t$ et donc
-
-\begin{align}
-    Y_t & = Y_{t-1} + 0,16X_{t-1} + 0,03 + \epsilon_t - 0,72\epsilon_{t-1}  \\
-    Y_t & = Y_{t-1} + 0,16(Y_{t-1}-Y_{t-2}) + 0,03 + \epsilon_t - 0,72\epsilon_{t-1}  \\
-    Y_t & = 1,16Y_{t-1} - 0,16Y_{t-2} + 0,03 + \epsilon_t - 0,72\epsilon_{t-1}
-\end{align}
+Au seuil de 10%, on l'ARIMA(1,1,1) ne peut pas être simplifié. On conserve donc ce modèle.
 
 # Partie 3 - Prévisions
 
@@ -345,6 +359,7 @@ predictions
 ### Région de confiance
 
 ```{r}
+# Représentation de la region de confiance.
 region <- ellipse::ellipse(omega, centre = predictions, level = .95)
 
 figsize(7, 5)
